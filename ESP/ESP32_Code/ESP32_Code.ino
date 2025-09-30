@@ -36,6 +36,7 @@ void setup() {
 
 void loop() {
   // Mantener WebSocket activo
+  //COMENTARIO TEST
   webSocket.loop();
 
   static bool lastButtonStable = HIGH;   // último estado estable del botón
