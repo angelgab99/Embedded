@@ -1,8 +1,14 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
+#include <Wire.h>
+#include "lm75.h"
 
 const char* ssid = "ESP32";
 const char* password = "246810ES!";
+lm75_t temp_sensor;
+extern "C" {
+  bool lm75_i2c_write_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
+}
 //comentario para test
 //comentario de Luis
 #define LED 2
@@ -33,44 +39,56 @@ void setup() {
   // Iniciar WebSocket
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
+
+  // Temperature sensor setup
+  Wire.begin(21, 22); // SDA=21, SCL=22 
+  lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
 }
 
 void loop() {
   // Mantener WebSocket activo
   //COMENTARIO TEST
-  webSocket.loop();
+  // webSocket.loop();
 
-  static bool lastButtonStable = HIGH;   // último estado estable del botón
-  static bool lastButtonReading = HIGH;  // última lectura cruda
-  bool currentReading = digitalRead(BTN);
+  // static bool lastButtonStable = HIGH;   // último estado estable del botón
+  // static bool lastButtonReading = HIGH;  // última lectura cruda
+  // bool currentReading = digitalRead(BTN);
 
-  // Si el valor cambió respecto a la última lectura
-  if (currentReading != lastButtonReading) {
-    lastDebounceTime = millis(); // reiniciar el temporizador
-  }
-  lastButtonReading = currentReading;
+  // // Si el valor cambió respecto a la última lectura
+  // if (currentReading != lastButtonReading) {
+  //   lastDebounceTime = millis(); // reiniciar el temporizador
+  // }
+  // lastButtonReading = currentReading;
 
-  // Solo cambiar estado si ya pasó el tiempo de debounce
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    // Si hay un cambio respecto al último estado estable
-    if (currentReading != lastButtonStable) {
-      lastButtonStable = currentReading;
+  // // Solo cambiar estado si ya pasó el tiempo de debounce
+  // if ((millis() - lastDebounceTime) > debounceDelay) {
+  //   // Si hay un cambio respecto al último estado estable
+  //   if (currentReading != lastButtonStable) {
+  //     lastButtonStable = currentReading;
 
-      // Detectar flanco de bajada (botón presionado)
-      if (lastButtonStable == LOW) {
-        // XOR para alternar
-        ledState = ledState ^ 1;
-        if (ledState) {
-          digitalWrite(LED, HIGH);
-          webSocket.broadcastTXT("1");
-        } 
-        else {
-            digitalWrite(LED, LOW);
-            webSocket.broadcastTXT("0");
-        }
-      }
-    }
-  }
+  //     // Detectar flanco de bajada (botón presionado)
+  //     if (lastButtonStable == LOW) {
+  //       // XOR para alternar
+  //       ledState = ledState ^ 1;
+  //       if (ledState) {
+  //         digitalWrite(LED, HIGH);
+  //         webSocket.broadcastTXT("1");
+  //       } 
+  //       else {
+  //           digitalWrite(LED, LOW);
+  //           webSocket.broadcastTXT("0");
+  //       }
+  //     }
+  //   }
+  // }
+
+  // Tmperature sensor
+  float temp;
+  if (lm75_read_temp_c(&temp_sensor, &temp))
+    Serial.printf("Temperature: %.3f °C\n", temp);
+  else
+    Serial.println("Error while reading LM75 sensor");
+  delay(1000);
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
