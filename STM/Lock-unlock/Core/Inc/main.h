@@ -70,10 +70,6 @@ void Error_Handler(void);
 #define inputButton_GPIO_Port GPIOC
 #define actuactor_Pin GPIO_PIN_8
 #define actuactor_GPIO_Port GPIOC
-#define STLINK_TX_Pin GPIO_PIN_9
-#define STLINK_TX_GPIO_Port GPIOA
-#define STLINK_RX_Pin GPIO_PIN_10
-#define STLINK_RX_GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14
