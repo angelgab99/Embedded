@@ -11,8 +11,17 @@ extern "C" {
 }
 //comentario para test
 //comentario de Luis
+#include <stdint.h>
+
 #define LED 2
 #define BTN 4
+#define POT_PIN 36 //ADC0 pin36
+#define RESOLUTION 8
+#define SPEEDLMT 200
+
+const char* ssid = "ESP32";
+const char* password = "246810ES!";
+
 
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms
@@ -23,10 +32,17 @@ bool ledState = false;
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
 
+void speedReadADC_init(uint8_t resolution);
+uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution);
+
 void setup() {
   Serial.begin(115200);
   pinMode(LED, OUTPUT);
   pinMode(BTN, INPUT_PULLUP); // botón en GPIO4
+
+  //Configurar Resolución ADC
+  speedReadADC_init(RESOLUTION);
+  
 
   // Configurar como Access Point
   WiFi.mode(WIFI_AP);
@@ -46,6 +62,10 @@ void setup() {
 }
 
 void loop() {
+
+  //Loop de velocidad
+  uint8_t speed = speedReadADC_loop(POT_PIN, SPEEDLMT, RESOLUTION);
+
   // Mantener WebSocket activo
   //COMENTARIO TEST
   // webSocket.loop();
@@ -89,7 +109,52 @@ void loop() {
   else
     Serial.println("Error while reading LM75 sensor");
   delay(1000);
+  webSocket.loop();
+
+  static bool lastButtonStable = HIGH;   // último estado estable del botón
+  static bool lastButtonReading = HIGH;  // última lectura cruda
+  bool currentReading = digitalRead(BTN);
+
+  // Si el valor cambió respecto a la última lectura
+  if (currentReading != lastButtonReading) {
+    lastDebounceTime = millis(); // reiniciar el temporizador
+  }
+  lastButtonReading = currentReading;
+
+  // Solo cambiar estado si ya pasó el tiempo de debounce
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Si hay un cambio respecto al último estado estable
+    if (currentReading != lastButtonStable) {
+      lastButtonStable = currentReading;
+
+      // Detectar flanco de bajada (botón presionado)
+      if (lastButtonStable == LOW) {
+        // XOR para alternar
+        ledState = ledState ^ 1;
+        if (ledState) {
+          digitalWrite(LED, HIGH);
+          webSocket.broadcastTXT("1");
+        } 
+        else {
+            digitalWrite(LED, LOW);
+            webSocket.broadcastTXT("0");
+        }
+      }
+    }
+  }
 }
+
+void speedReadADC_init(uint8_t resolution){
+  analogReadResolution(resolution);
+  Serial.print("ADC read Init");
+}
+
+uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution){
+  uint8_t speed = (analogRead(POT_PIN) * speedLmt)/(1 << resolution);
+  Serial.print(speed);
+  return speed;
+}
+
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
