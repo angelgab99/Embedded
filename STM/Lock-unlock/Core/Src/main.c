@@ -49,7 +49,21 @@ UART_HandleTypeDef huart2;
 
 osThreadId defaultTaskHandle;
 /* USER CODE BEGIN PV */
+TaskHandle_t TaskTempHandle;
+TaskHandle_t TaskSpeedHandle;
+TaskHandle_t TaskRxHandle;
 
+int16_t temperature = 0;
+uint8_t	speed = 0;
+uint8_t button_status = 0;
+
+CAN_TxHeaderTypeDef SpeedTxHeader;
+CAN_TxHeaderTypeDef TempTxHeader;
+CAN_RxHeaderTypeDef RxHeader;
+uint8_t TxData = 0x01;
+uint8_t RxData[4] = {0,0,0,0};
+uint32_t txMailbox;
+CAN_FilterTypeDef sf;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,7 +74,9 @@ static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
-
+void StartTempTask( void *pvParameters );
+void StartSpeedTask(void *pvParameters);
+void StartRxTask(void *pvParameters);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -100,6 +116,7 @@ int main(void)
   MX_CAN_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
   RetargetInit(&huart2);
 
   printf("First Session Embedded Systems!!\r\n");
@@ -138,6 +155,9 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  xTaskCreate(StartSpeedTask, "TaskSpeed", 128, NULL, 1, &TaskSpeedHandle);
+  xTaskCreate(StartTempTask, "TaskTemp", 128, NULL, 1, &TaskTempHandle);
+  xTaskCreate(StartRxTask, "TaskRx", 128, NULL, 2, &TaskRxHandle);
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -226,7 +246,37 @@ static void MX_CAN_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN_Init 2 */
+  SpeedTxHeader->DLC = 0x01;
+  SpeedTxHeader->IDE = CAN_ID_STD;
+  SpeedTxHeader->RTR = CAN_RTR_DATA;
+  SpeedTxHeader->StdId = 0x10;
+  SpeedTxHeader->ExtId = 0x00;
+  SpeedTxHeader->TransmitGlobalTime = DISABLE;
 
+  TempTxHeader->DLC = 0x01;
+  TempTxHeader->IDE = CAN_ID_STD;
+  TempTxHeader->RTR = CAN_RTR_DATA;
+  TempTxHeader->StdId = 0x11;
+  TempTxHeader->ExtId = 0x00;
+  TempTxHeader->TransmitGlobalTime = DISABLE;
+
+  RxHeader->DLC = 0x04;
+  RxHeader->ExtId = 0x00;
+  RxHeader->StdId = 0x01;
+  RxHeader->IDE CAN_ID_STD;
+  RxHeader->RTR = CAN_RTR_DATA;
+
+
+  sf.FilterBank = 0;
+  sf.FilterMode = CAN_FILTERMODE_IDMASK;
+  sf.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+  sf.FilterIdHigh = 0x0000;
+  sf.FilterIdLow = 0x0000;
+  sf.FilterMaskIdHigh = 0x0000;
+  sf.FilterMaskIdLow = 0x0000;
+  sf.FilterScale = CAN_FILTERSCALE_32BIT;
+  sf.FilterActivation = CAN_FILTER_ENABLE;
+  sf.SlaveStartFilterBank = 15;
   /* USER CODE END CAN_Init 2 */
 
 }
@@ -324,7 +374,21 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void StartTempTask( void *pvParameters )
+{
 
+
+}
+
+void StartSpeedTask(void *pvParameters)
+{
+
+}
+
+void StartRxTask(void *pvParameters)
+{
+
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
