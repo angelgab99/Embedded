@@ -121,6 +121,7 @@ int main(void)
 
   printf("First Session Embedded Systems!!\r\n");
 
+  /*
   while (1)
   {
 	  //HAL_GPIO_TogglePin(LED_2_GPIO_Port, LED_2_Pin);
@@ -130,6 +131,56 @@ int main(void)
 	  printf("\n%d,%d,%d",200,1,60);
 	  HAL_Delay(300);
   }
+  */
+
+
+  while (1)
+    {
+
+        if (HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0)
+        {
+            if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+            {
+                switch (RxHeader.StdId)
+                {
+
+                    case 0x100:
+                    {
+                        uint8_t speed = RxData[0];
+                        printf("[ID:0x100] Velocidad: %u\r\n", speed);
+                        // Aquí podrías actualizar una variable global o PWM
+                        break;
+                    }
+
+
+                    case 0x101:
+                    {
+                  	  int16_t tempInt = 2543; // 25.43°C
+                  	  printf("[ID:0x101] Temperatura: %d.%02d °C\r\n", tempInt / 100, tempInt % 100);
+                        break;
+                    }
+
+
+                    case 0x102:
+                    {
+                        uint8_t buttonState = RxData[0];
+                        printf("[ID:0x102] Botón: %s\r\n", buttonState ? "PRESIONADO" : "LIBRE");
+                        HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin,
+                                          buttonState ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                        break;
+                    }
+
+                    default:
+                        printf("Mensaje desconocido: ID=0x%03lX\r\n", RxHeader.StdId);
+                        break;
+                }
+            }
+        }
+
+        HAL_Delay(10);
+    }
+      /* USER CODE BEGIN 3 */
+    }
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */

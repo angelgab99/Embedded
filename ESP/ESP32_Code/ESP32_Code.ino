@@ -2,6 +2,8 @@
 #include <WebSocketsServer.h>
 #include <Wire.h>
 #include "lm75.h"
+#include <mcp_can.h>
+#include <SPI.h>
 
 const char* ssid = "ESP32";
 const char* password = "246810ES!";
@@ -19,12 +21,20 @@ extern "C" {
 #define RESOLUTION 8
 #define SPEEDLMT 200
 
+#define CAN0_INT D2      // Set INT to pin D2 related to GPIO15
+#define CAN0_CS D8       // Set CS to pin D8 related to GPIO5
+MCP_CAN CAN0(CAN0_CS);     
+
 const char* ssid = "ESP32";
 const char* password = "246810ES!";
 
 
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms
+
+// CAN VARIABLES
+unsigned long prevTX = 0;                                        // Variable to store last execution time
+const unsigned int invlTX = 1000;                                // One second interval constant
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -34,6 +44,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
 
 void speedReadADC_init(uint8_t resolution);
 uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution);
+void sendCANMessage(unsigned long id, byte *data, byte len);
 
 void setup() {
   Serial.begin(115200);
@@ -59,6 +70,13 @@ void setup() {
   // Temperature sensor setup
   Wire.begin(21, 22); // SDA=21, SCL=22 
   lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
+  if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK)
+    Serial.println("MCP2515 inicializado correctamente.");
+  else
+    Serial.println("Error al inicializar MCP2515.");
+
+  CAN0.setMode(MCP_NORMAL);
+  Serial.println("CAN listo en modo NORMAL.");
 }
 
 void loop() {
@@ -142,6 +160,26 @@ void loop() {
       }
     }
   }
+  //CODIGO CAN PARA ENVIAR CADA SEGUNDO 
+  if (millis() - prevTX >= invlTX) {
+    prevTX = millis();
+
+    byte speedData[1];
+    speedData[0] = speed;
+    sendCANMessage(0x100, speedData, 1);
+
+    int16_t tempInt = (int16_t)(temp * 100); 
+    byte tempData[2];
+    tempData[0] = tempInt >> 8;
+    tempData[1] = tempInt & 0xFF;
+    sendCANMessage(0x101, tempData, 2);
+
+    byte btnData[1];
+    btnData[0] = ledState ? 1 : 0;
+    sendCANMessage(0x102, btnData, 1);
+
+    Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, ledState);
+  }
 }
 
 void speedReadADC_init(uint8_t resolution){
@@ -189,5 +227,13 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
       break;
     }
   }
+}
+
+void sendCANMessage(unsigned long id, byte *data, byte len) {
+  byte status = CAN0.sendMsgBuf(id, 0, len, data);
+  if (status == CAN_OK)
+    Serial.printf("Mensaje CAN ID 0x%03lX enviado OK\n", id);
+  else
+    Serial.printf("Error al enviar CAN ID 0x%03lX\n", id);
 }
 
