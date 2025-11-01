@@ -246,25 +246,25 @@ static void MX_CAN_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN_Init 2 */
-  SpeedTxHeader->DLC = 0x01;
-  SpeedTxHeader->IDE = CAN_ID_STD;
-  SpeedTxHeader->RTR = CAN_RTR_DATA;
-  SpeedTxHeader->StdId = 0x10;
-  SpeedTxHeader->ExtId = 0x00;
-  SpeedTxHeader->TransmitGlobalTime = DISABLE;
+  SpeedTxHeader.DLC = 0x01;
+  SpeedTxHeader.IDE = CAN_ID_STD;
+  SpeedTxHeader.RTR = CAN_RTR_DATA;
+  SpeedTxHeader.StdId = 0x10;
+  SpeedTxHeader.ExtId = 0x00;
+  SpeedTxHeader.TransmitGlobalTime = DISABLE;
 
-  TempTxHeader->DLC = 0x01;
-  TempTxHeader->IDE = CAN_ID_STD;
-  TempTxHeader->RTR = CAN_RTR_DATA;
-  TempTxHeader->StdId = 0x11;
-  TempTxHeader->ExtId = 0x00;
-  TempTxHeader->TransmitGlobalTime = DISABLE;
+  TempTxHeader.DLC = 0x01;
+  TempTxHeader.IDE = CAN_ID_STD;
+  TempTxHeader.RTR = CAN_RTR_DATA;
+  TempTxHeader.StdId = 0x11;
+  TempTxHeader.ExtId = 0x00;
+  TempTxHeader.TransmitGlobalTime = DISABLE;
 
-  RxHeader->DLC = 0x04;
-  RxHeader->ExtId = 0x00;
-  RxHeader->StdId = 0x01;
-  RxHeader->IDE CAN_ID_STD;
-  RxHeader->RTR = CAN_RTR_DATA;
+  RxHeader.DLC = 0x04;
+  RxHeader.ExtId = 0x00;
+  RxHeader.StdId = 0x01;
+  RxHeader.IDE = CAN_ID_STD;
+  RxHeader.RTR = CAN_RTR_DATA;
 
 
   sf.FilterBank = 0;
