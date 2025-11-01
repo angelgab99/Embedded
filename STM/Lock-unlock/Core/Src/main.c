@@ -121,15 +121,7 @@ int main(void)
 
   printf("First Session Embedded Systems!!\r\n");
 
-  while (1)
-  {
-	  //HAL_GPIO_TogglePin(LED_2_GPIO_Port, LED_2_Pin);
-	  //HAL_Delay(1000);
-	  printf("\n%d,%d,%d",100,0,100);
-	  HAL_Delay(300);
-	  printf("\n%d,%d,%d",200,1,60);
-	  HAL_Delay(300);
-  }
+
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -149,7 +141,7 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of defaultpask */
+  /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
@@ -230,11 +222,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN1;
-  hcan.Init.Prescaler = 16;
+  hcan.Init.Prescaler = 4;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_13TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -260,7 +252,7 @@ static void MX_CAN_Init(void)
   TempTxHeader.ExtId = 0x00;
   TempTxHeader.TransmitGlobalTime = DISABLE;
 
-  RxHeader.DLC = 0x04;
+  RxHeader.DLC = 0x06;
   RxHeader.ExtId = 0x00;
   RxHeader.StdId = 0x01;
   RxHeader.IDE = CAN_ID_STD;
@@ -278,7 +270,20 @@ static void MX_CAN_Init(void)
   sf.FilterActivation = CAN_FILTER_ENABLE;
   sf.SlaveStartFilterBank = 15;
   /* USER CODE END CAN_Init 2 */
+  if (HAL_CAN_ConfigFilter(&hcan, &sf) != HAL_OK) {
+      Error_Handler();
+  }
+  // 3️⃣ Habilitar interrupción del NVIC
+  HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
+  // 4️⃣ Activar notificación de recepción
+  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+  // 5️⃣ Iniciar el periférico CAN
+  if (HAL_CAN_Start(&hcan) != HAL_OK){
+    Error_Handler();
+  }
 }
 
 /**
@@ -374,21 +379,61 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void StartTempTask( void *pvParameters )
+void StartTempTask(void *pvParameters)
 {
-
-
+  // Esta tarea no transmite nada, solo existe para ejemplo.
+  for (;;)
+  {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
 }
 
 void StartSpeedTask(void *pvParameters)
 {
+  uint8_t messageData = 0x01; // ejemplo de velocidad simulada
+  for (;;)
+  {
+    if (HAL_CAN_AddTxMessage(&hcan, &SpeedTxHeader, &messageData, &txMailbox) == HAL_OK)
+    {
+      printf("[CAN TX] ID: 0x%03lX  Data: %02X\r\n", SpeedTxHeader.StdId, messageData);
+    }
+    else
+    {
+      printf("[CAN TX] Error al enviar mensaje\r\n");
+    }
 
+    vTaskDelay(pdMS_TO_TICKS(1000)); // enviar cada 1s
+  }
 }
+
 
 void StartRxTask(void *pvParameters)
 {
+  printf("StartRxTask iniciada. Esperando mensajes CAN...\r\n");
+
+        printf("[CAN RX] ID: 0x%03lX  DLC:%d  Data:", RxHeader.StdId, RxHeader.DLC);
+        for (uint8_t i = 0; i < RxHeader.DLC; i++)
+          printf(" %02X", RxData[i]);
+        	printf("\r\n");
+		vTaskDelay(pdMS_TO_TICKS(1000)); // solo para mantener la tarea viva
+
+    vTaskDelay(pdMS_TO_TICKS(10)); // evita bloquear CPU
 
 }
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+    {
+        printf("[CAN RX ISR] ID: 0x%03lX DLC:%d Data:", rxHeader.StdId, rxHeader.DLC);
+        for (uint8_t i = 0; i < rxHeader.DLC; i++)
+            printf(" %02X", rxData[i]);
+        printf("\r\n");
+    }
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
