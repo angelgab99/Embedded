@@ -18,6 +18,11 @@ MCP_CAN CAN0(CAN0_CS);
 const char* ssid = "ESP8266";
 const char* password = "246810ES!";
 
+//VARIABLES de funciones
+float temp;
+uint8_t speed;
+bool lockState = false;
+
 // Variables
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms
@@ -25,7 +30,7 @@ unsigned long prevTX = 0;
 const unsigned int invlTX = 1000; // intervalo de envío CAN (ms)
 
 WebSocketsServer webSocket = WebSocketsServer(81);
-bool ledState = false;
+
 
 lm75_t temp_sensor;
 extern "C" {
@@ -67,13 +72,18 @@ void setup() {
     Serial.println("MCP2515 inicializado correctamente.");
   else
     Serial.println("Error al inicializar MCP2515.");
-  CAN0.setMode(MCP_NORMAL);
-  Serial.println("CAN listo en modo NORMAL.");
+    CAN0.setMode(MCP_NORMAL);
+    Serial.println("CAN listo en modo NORMAL.");
 }
 
 void loop() {
+
+  
+
+
+
   // Leer velocidad desde el potenciómetro
-  uint8_t speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+  speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
 
   // Mantener WebSocket activo
   webSocket.loop();
@@ -90,15 +100,15 @@ void loop() {
     if (currentReading != lastButtonStable) {
       lastButtonStable = currentReading;
       if (lastButtonStable == LOW) {
-        ledState = !ledState;
-        digitalWrite(LED, ledState ? HIGH : LOW);
-        webSocket.broadcastTXT(ledState ? "1" : "0");
+        lockState = !lockState;
+        digitalWrite(LED, lockState ? HIGH : LOW);
+        webSocket.broadcastTXT(lockState ? "1" : "0");
       }
     }
   }
 
   // Leer temperatura
-  float temp;
+
   if (lm75_read_temp_c(&temp_sensor, &temp))
     Serial.printf("Temperature: %.2f °C\n", temp);
   else
@@ -117,10 +127,10 @@ void loop() {
     byte tempData[2] = { byte(tempInt >> 8), byte(tempInt & 0xFF) };
     sendCANMessage(0x101, tempData, 2);
  delay(2000);
-    byte btnData[1] = { ledState ? 1 : 0 };
+    byte btnData[1] = { lockState ? 1 : 0 };
     sendCANMessage(0x102, btnData, 1);
  delay(2000);
-    Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, ledState);
+    Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, lockState);
   }
 }
 
@@ -139,7 +149,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
   switch (type) {
     case WStype_CONNECTED:
       Serial.printf("Cliente [%u] conectado\n", num);
-      webSocket.sendTXT(num, ledState ? "1" : "0");
+      webSocket.sendTXT(num, lockState ? "1" : "0");
       break;
     case WStype_DISCONNECTED:
       Serial.printf("Cliente [%u] desconectado\n", num);
@@ -147,8 +157,8 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
     case WStype_TEXT: {
       String msg = String((char*)payload).substring(0, length);
       Serial.printf("Mensaje de [%u]: %s\n", num, msg.c_str());
-      if (msg == "1") { digitalWrite(LED, HIGH); ledState = true; webSocket.broadcastTXT("1"); }
-      else if (msg == "0") { digitalWrite(LED, LOW); ledState = false; webSocket.broadcastTXT("0"); }
+      if (msg == "1") { digitalWrite(LED, HIGH); lockState = true; webSocket.broadcastTXT("1"); }
+      else if (msg == "0") { digitalWrite(LED, LOW); lockState = false; webSocket.broadcastTXT("0"); }
       break;
     }
   }
