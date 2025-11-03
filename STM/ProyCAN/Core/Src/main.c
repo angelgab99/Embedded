@@ -47,6 +47,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 	CAN_TxHeaderTypeDef TxHeader;
+	CAN_TxHeaderTypeDef TempTxHeader;
 	CAN_RxHeaderTypeDef RxHeader;
 	uint8_t TxData[8] = {0x10, 0x34, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22};
 	uint8_t RxData[8];
@@ -132,6 +133,18 @@ int main(void)
 		       } else {
 		           printf("Error al enviar CAN\r\n");
 		       }
+		       HAL_Delay(2000);
+		       // Enviar mensaje CAN con ID 0x10
+		       printf("Despues de primer if r\n");
+			   if (HAL_CAN_AddTxMessage(&hcan, &TempTxHeader, TxData, &txMailbox) == HAL_OK) {
+				   printf("CAN TX: ID=0x%03lX Data:", TempTxHeader.StdId);
+				   for (int i = 0; i < TempTxHeader.DLC; i++) {
+					   printf(" %02X", TxData[i]);
+				   }
+				   printf("\r\n");
+			   } else {
+				   printf("Error al enviar CAN\r\n");
+			   }
 		   }
 	      HAL_Delay(10);
 	  }
@@ -233,6 +246,12 @@ static void MX_CAN_Init(void)
   TxHeader.ExtId = 0x00;
   TxHeader.TransmitGlobalTime = DISABLE;
 
+  TempTxHeader.DLC = 8;
+  TempTxHeader.IDE = CAN_ID_STD;
+  TempTxHeader.RTR = CAN_RTR_DATA;
+  TempTxHeader.StdId = 0x11;
+  TempTxHeader.ExtId = 0x00;
+  TempTxHeader.TransmitGlobalTime = DISABLE;
   /* USER CODE END CAN_Init 2 */
 
 }
