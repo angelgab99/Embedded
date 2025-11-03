@@ -21,13 +21,10 @@ extern "C" {
 #define RESOLUTION 8
 #define SPEEDLMT 200
 
-#define CAN0_INT D2      // Set INT to pin D2 related to GPIO15
-#define CAN0_CS D8       // Set CS to pin D8 related to GPIO5
+#define CAN0_INT 15      // Set INT to pin D2 related to GPIO15
+#define CAN0_CS 5       // Set CS to pin D8 related to GPIO5 - ESP32
+//#define CAN0_CS D8      // ESP8266
 MCP_CAN CAN0(CAN0_CS);     
-
-const char* ssid = "ESP32";
-const char* password = "246810ES!";
-
 
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms
@@ -72,11 +69,19 @@ void setup() {
   lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
   if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK)
     Serial.println("MCP2515 inicializado correctamente.");
-  else
+  else {
     Serial.println("Error al inicializar MCP2515.");
+    while(1){}
+  }
 
-  CAN0.setMode(MCP_NORMAL);
-  Serial.println("CAN listo en modo NORMAL.");
+  // CAN0.setMode(MCP_NORMAL);
+  // Serial.println("CAN listo en modo NORMAL.");
+  if(CAN0.setMode(MCP_LOOPBACK) == CAN_OK)
+    Serial.println("Modo Loopback activado");
+  else
+    Serial.println("Error al activar Loopback");
+  delay(1000);
+
 }
 
 void loop() {
@@ -84,41 +89,40 @@ void loop() {
   //Loop de velocidad
   uint8_t speed = speedReadADC_loop(POT_PIN, SPEEDLMT, RESOLUTION);
 
-  // Mantener WebSocket activo
-  //COMENTARIO TEST
-  // webSocket.loop();
+  //Mantener WebSocket activo
+  webSocket.loop();
 
-  // static bool lastButtonStable = HIGH;   // último estado estable del botón
-  // static bool lastButtonReading = HIGH;  // última lectura cruda
-  // bool currentReading = digitalRead(BTN);
+  static bool lastButtonStable = HIGH;   // último estado estable del botón
+  static bool lastButtonReading = HIGH;  // última lectura cruda
+  bool currentReading = digitalRead(BTN);
 
-  // // Si el valor cambió respecto a la última lectura
-  // if (currentReading != lastButtonReading) {
-  //   lastDebounceTime = millis(); // reiniciar el temporizador
-  // }
-  // lastButtonReading = currentReading;
+  // Si el valor cambió respecto a la última lectura
+  if (currentReading != lastButtonReading) {
+    lastDebounceTime = millis(); // reiniciar el temporizador
+  }
+  lastButtonReading = currentReading;
 
-  // // Solo cambiar estado si ya pasó el tiempo de debounce
-  // if ((millis() - lastDebounceTime) > debounceDelay) {
-  //   // Si hay un cambio respecto al último estado estable
-  //   if (currentReading != lastButtonStable) {
-  //     lastButtonStable = currentReading;
+  // Solo cambiar estado si ya pasó el tiempo de debounce
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Si hay un cambio respecto al último estado estable
+    if (currentReading != lastButtonStable) {
+      lastButtonStable = currentReading;
 
-  //     // Detectar flanco de bajada (botón presionado)
-  //     if (lastButtonStable == LOW) {
-  //       // XOR para alternar
-  //       ledState = ledState ^ 1;
-  //       if (ledState) {
-  //         digitalWrite(LED, HIGH);
-  //         webSocket.broadcastTXT("1");
-  //       } 
-  //       else {
-  //           digitalWrite(LED, LOW);
-  //           webSocket.broadcastTXT("0");
-  //       }
-  //     }
-  //   }
-  // }
+      // Detectar flanco de bajada (botón presionado)
+      if (lastButtonStable == LOW) {
+        // XOR para alternar
+        ledState = ledState ^ 1;
+        if (ledState) {
+          digitalWrite(LED, HIGH);
+          webSocket.broadcastTXT("1");
+        } 
+        else {
+            digitalWrite(LED, LOW);
+            webSocket.broadcastTXT("0");
+        }
+      }
+    }
+  }
 
   // Tmperature sensor
   float temp;
@@ -129,9 +133,9 @@ void loop() {
   delay(1000);
   webSocket.loop();
 
-  static bool lastButtonStable = HIGH;   // último estado estable del botón
-  static bool lastButtonReading = HIGH;  // última lectura cruda
-  bool currentReading = digitalRead(BTN);
+  // static bool lastButtonStable = HIGH;   // último estado estable del botón
+  // static bool lastButtonReading = HIGH;  // última lectura cruda
+  // bool currentReading = digitalRead(BTN);
 
   // Si el valor cambió respecto a la última lectura
   if (currentReading != lastButtonReading) {
