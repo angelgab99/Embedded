@@ -12,7 +12,7 @@
 #define SPEEDLMT 200
 
 #define CAN0_INT 15   // GPIO para INT MCP2515
-#define CAN0_CS 5     // GPIO para CS MCP2515
+#define CAN0_CS D8     // GPIO para CS MCP2515
 MCP_CAN CAN0(CAN0_CS);     
 
 const char* ssid = "ESP8266";
@@ -31,6 +31,10 @@ const unsigned int invlTX = 1000; // intervalo de envío CAN (ms)
 
 uint32_t tempBits;
 byte data[6];  
+long unsigned int rxId;
+unsigned char len = 0;
+unsigned char rxBuf[8];
+
  
 
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -75,12 +79,12 @@ void setup() {
   if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK)
   {
     Serial.println("MCP2515 inicializado correctamente.");
+    CAN0.setMode(MCP_NORMAL);
+    Serial.println("CAN listo en modo NORMAL.");
   }
   else
   {
     Serial.println("Error al inicializar MCP2515.");
-    CAN0.setMode(MCP_NORMAL);
-    Serial.println("CAN listo en modo NORMAL.");
   }
 }
 
@@ -127,19 +131,15 @@ void loop() {
   // }
 
   if (CAN0.checkReceive() == CAN_MSGAVAIL) {
-        long unsigned int rxId;
-        unsigned char len = 0;
-        byte rxBuf[1];
- 
         CAN0.readMsgBuf(&rxId, &len, rxBuf);  // Leer mensaje
- 
         Serial.print("Mensaje CAN recibido ID: ");
         Serial.println(rxId);
 
         switch(rxId){
           case 0x10 :
           // Leer velocidad desde el potenciómetro
-          speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+          // speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+          speed = 50;
           data[0] = (0x01 & lockState);
           data[1] = (0xFF & speed);
           data[2] = (tempBits & 0xFF);
