@@ -11,7 +11,7 @@
 #define POT_PIN A0 // ADC único del ESP8266
 #define SPEEDLMT 200
 
-#define CAN0_INT 15   // GPIO para INT MCP2515
+#define CAN0_INT D2   // GPIO para INT MCP2515
 #define CAN0_CS D8     // GPIO para CS MCP2515
 MCP_CAN CAN0(CAN0_CS);     
 
@@ -72,7 +72,7 @@ void setup() {
   webSocket.onEvent(onWebSocketEvent);
 
   // Sensor de temperatura LM75
-  Wire.begin(D2, D1); // ESP8266: SDA=D2, SCL=D1
+  Wire.begin(D3, D1); // ESP8266: SDA=D2, SCL=D1
   lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
 
   // Inicializar MCP2515
@@ -89,57 +89,68 @@ void setup() {
 }
 
 void loop() {
-  // Mantener WebSocket activo
-  // webSocket.loop();
-
-  // // Leer botón con debounce
-  // static bool lastButtonStable = HIGH;
-  // static bool lastButtonReading = HIGH;
-  // bool currentReading = digitalRead(BTN);
-
-  // if (currentReading != lastButtonReading) lastDebounceTime = millis();
-  // lastButtonReading = currentReading;
-
-  // if ((millis() - lastDebounceTime) > debounceDelay) {
-  //   if (currentReading != lastButtonStable) {
-  //     lastButtonStable = currentReading;
-  //     if (lastButtonStable == LOW) {
-  //       lockState = !lockState;
-  //       digitalWrite(LED, lockState ? HIGH : LOW);
-  //       webSocket.broadcastTXT(lockState ? "1" : "0");
-  //       // Leer velocidad desde el potenciómetro
-  //       speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
-
-  //       //leer temperatura
-  //       if (lm75_read_temp_c(&temp_sensor, &temp))
-  //       {
-  //         tempBits = *((uint32_t*)&temp);
-  //       }
-  //       else{
-  //         tempBits = 0x00;
-  //       }
-  //       data[0] = (0x01 & lockState);
-  //       data[1] = (0xFF & speed);
-  //       data[2] = (tempBits & 0xFF);
-  //       data[3] = ((tempBits >> 8) & 0xFF);
-  //       data[4] = ((tempBits >> 16) & 0xFF);
-  //       data[5] = ((tempBits >> 24) & 0xFF);
-  //       CAN0.sendMsgBuf(0x01, 0, 6, data);
-
-  //     }
-  //   }
+  // speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+  // Serial.println(speed);
+  // if (lm75_read_temp_c(&temp_sensor, &temp))
+  // {
+  //   Serial.println(temp);
   // }
+  // else{
+  //   Serial.print("error lectura");
+  // }
+
+  // delay(2000);
+  // Mantener WebSocket activo
+  webSocket.loop();
+
+  // Leer botón con debounce
+  static bool lastButtonStable = HIGH;
+  static bool lastButtonReading = HIGH;
+  bool currentReading = digitalRead(BTN);
+
+  if (currentReading != lastButtonReading) lastDebounceTime = millis();
+  lastButtonReading = currentReading;
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (currentReading != lastButtonStable) {
+      lastButtonStable = currentReading;
+      if (lastButtonStable == LOW) {
+        lockState = !lockState;
+        digitalWrite(LED, lockState ? HIGH : LOW);
+        webSocket.broadcastTXT(lockState ? "1" : "0");
+        // Leer velocidad desde el potenciómetro
+        speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+
+        //leer temperatura
+        if (lm75_read_temp_c(&temp_sensor, &temp))
+        {
+          tempBits = *((uint32_t*)&temp);
+        }
+        else{
+          tempBits = 0x00;
+        }
+        data[0] = (0x01 & lockState);
+        data[1] = (0xFF & speed);
+        data[2] = (tempBits & 0xFF);
+        data[3] = ((tempBits >> 8) & 0xFF);
+        data[4] = ((tempBits >> 16) & 0xFF);
+        data[5] = ((tempBits >> 24) & 0xFF);
+        CAN0.sendMsgBuf(0x01, 0, 6, data);
+
+      }
+    }
+  }
 
   if (CAN0.checkReceive() == CAN_MSGAVAIL) {
         CAN0.readMsgBuf(&rxId, &len, rxBuf);  // Leer mensaje
         Serial.print("Mensaje CAN recibido ID: ");
-        Serial.println(rxId);
+        Serial.println(rxId,HEX);
 
         switch(rxId){
           case 0x10 :
           // Leer velocidad desde el potenciómetro
-          // speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
-          speed = 50;
+          speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+          // speed = 50;
           data[0] = (0x01 & lockState);
           data[1] = (0xFF & speed);
           data[2] = (tempBits & 0xFF);

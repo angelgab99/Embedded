@@ -51,6 +51,10 @@ UART_HandleTypeDef huart2;
 	CAN_RxHeaderTypeDef RxHeader;
 	uint8_t TxData[8] = {0x10, 0x34, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22};
 	uint8_t RxData[8];
+	float temp = 0;
+	uint8_t	speed = 0;
+	uint8_t button_status = 0;
+
 	uint32_t txMailbox;
 	CAN_FilterTypeDef sf;
 
@@ -110,14 +114,26 @@ int main(void)
   printf("CAN interfacing!!\r\n");
 
 	  while (1) {
+
+
+
 		  if (HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0) {
 		      if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
-	          printf("CAN ID: 0x%03lX  Data:", RxHeader.StdId);
-	          for (int i = 0; i < RxHeader.DLC; i++) {
-	              printf(" %02X", RxData[i]);
-	          }
+		    	 // printf("CAN ID: 0x%03lX  Data:", RxHeader.StdId);
+				  for (int i = 0; i < RxHeader.DLC; i++) {
+					  //printf(" %02X", RxData[i]);
+				  }
+				  button_status = (0x01 & RxData[0]);
+				  speed = (0xFF & RxData[1]);
+				  uint32_t tempBits = ((uint32_t)RxData[2]) |
+				                      ((uint32_t)RxData[3] << 8) |
+				                      ((uint32_t)RxData[4] << 16) |
+				                      ((uint32_t)RxData[5] << 24);
+
+				  memcpy(&temp, &tempBits, sizeof(float));
+					  printf("\n%d,%d, %d.%02d",speed,button_status ,45);
 		      }
-	          printf("\r\n");
+	        //  printf("\r\n");
 	      }
 		  static uint32_t lastSend = 0;
 		  if (HAL_GetTick() - lastSend >= 1000) {  // cada 1 segundo
@@ -125,28 +141,28 @@ int main(void)
 
 		       // Enviar mensaje CAN con ID 0x10
 		       if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &txMailbox) == HAL_OK) {
-		           printf("CAN TX: ID=0x%03lX Data:", TxHeader.StdId);
+		           //printf("CAN TX: ID=0x%03lX Data:", TxHeader.StdId);
 		           for (int i = 0; i < TxHeader.DLC; i++) {
-		               printf(" %02X", TxData[i]);
+		               //printf(" %02X", TxData[i]);
 		           }
-		           printf("\r\n");
+		           //printf("\r\n");
 		       } else {
-		           printf("Error al enviar CAN\r\n");
+		           //printf("Error al enviar CAN\r\n");
 		       }
-		       HAL_Delay(2000);
+		       //HAL_Delay(2000);
 		       // Enviar mensaje CAN con ID 0x10
-		       printf("Despues de primer if r\n");
+
 			   if (HAL_CAN_AddTxMessage(&hcan, &TempTxHeader, TxData, &txMailbox) == HAL_OK) {
-				   printf("CAN TX: ID=0x%03lX Data:", TempTxHeader.StdId);
+				  // printf("CAN TX: ID=0x%03lX Data:", TempTxHeader.StdId);
 				   for (int i = 0; i < TempTxHeader.DLC; i++) {
-					   printf(" %02X", TxData[i]);
+					  // printf(" %02X", TxData[i]);
 				   }
-				   printf("\r\n");
+				  // printf("\r\n");
 			   } else {
-				   printf("Error al enviar CAN\r\n");
+				   //printf("Error al enviar CAN\r\n");
 			   }
 		   }
-	      HAL_Delay(10);
+	      HAL_Delay(1000);
 	  }
   /* USER CODE END 3 */
 
