@@ -58,7 +58,7 @@
 extern TIM_HandleTypeDef htim4;
 extern CAN_HandleTypeDef hcan;
 /* USER CODE BEGIN EV */
-
+extern CAN_HandleTypeDef hcan;
 /* USER CODE END EV */
 
 /******************************************************************************/

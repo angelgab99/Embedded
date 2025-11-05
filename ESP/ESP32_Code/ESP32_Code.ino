@@ -5,23 +5,24 @@
 #include <mcp_can.h>
 #include <SPI.h>
 
-// Definiciones de pines y parámetros
+const char* ssid = "ESP32";
+const char* password = "246810ES!";
+lm75_t temp_sensor;
+extern "C" {
+  bool lm75_i2c_write_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
+}
+
+#include <stdint.h>
+
 #define LED 2
 #define BTN 4
 #define POT_PIN A0 // ADC único del ESP8266
 #define SPEEDLMT 200
 
-#define CAN0_INT D2   // GPIO para INT MCP2515
-#define CAN0_CS D8     // GPIO para CS MCP2515
+#define CAN0_INT 15      // Set INT to pin D2 related to GPIO15
+#define CAN0_CS 5       // Set CS to pin D8 related to GPIO5 - ESP32
+//#define CAN0_CS D8      // ESP8266
 MCP_CAN CAN0(CAN0_CS);     
-
-const char* ssid = "ESP8266";
-const char* password = "246810ES!";
-
-//VARIABLES de funciones
-float temp;
-uint8_t speed;
-uint8_t lockState = 0;
 
 // Variables
 unsigned long lastDebounceTime = 0;
@@ -37,6 +38,11 @@ unsigned char rxBuf[8];
 
  
 
+// CAN VARIABLES
+unsigned long prevTX = 0;                                        // Variable to store last execution time
+//const unsigned int invlTX = 1000;                                // One second interval constant
+const unsigned int invlTX = 10000;                                // Three seconds interval constant
+
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 
@@ -45,10 +51,8 @@ extern "C" {
   bool lm75_i2c_write_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
 }
 
-// --- Declaraciones de funciones ---
-void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
-void speedReadADC_init();
-uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt);
+void speedReadADC_init(uint8_t resolution);
+uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution);
 void sendCANMessage(unsigned long id, byte *data, byte len);
 
 void setup() {
@@ -74,41 +78,71 @@ void setup() {
   // Sensor de temperatura LM75
   Wire.begin(D3, D1); // ESP8266: SDA=D2, SCL=D1
   lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
-
-  // Inicializar MCP2515
   if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK)
-  {
     Serial.println("MCP2515 inicializado correctamente.");
-    CAN0.setMode(MCP_NORMAL);
-    Serial.println("CAN listo en modo NORMAL.");
-  }
-  else
-  {
+  else {
     Serial.println("Error al inicializar MCP2515.");
+    while(1){}
   }
+
+  // CAN0.setMode(MCP_NORMAL);
+  // Serial.println("CAN listo en modo NORMAL.");
+  if(CAN0.setMode(MCP_NORMAL) == CAN_OK)
+    Serial.println("Modo normal activado");
+  else
+    Serial.println("Error al activar normal");
+  delay(1000);
+
 }
 
 void loop() {
-  // speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
-  // Serial.println(speed);
-  // if (lm75_read_temp_c(&temp_sensor, &temp))
-  // {
-  //   Serial.println(temp);
-  // }
-  // else{
-  //   Serial.print("error lectura");
-  // }
+
+  //Loop de velocidad
+  uint8_t speed = speedReadADC_loop(POT_PIN, SPEEDLMT, RESOLUTION);
+
+  //Mantener WebSocket activo
+  webSocket.loop();
+
+  static bool lastButtonStable = HIGH;   // último estado estable del botón
+  static bool lastButtonReading = HIGH;  // última lectura cruda
+  bool currentReading = digitalRead(BTN);
+
+  // Si el valor cambió respecto a la última lectura
+  if (currentReading != lastButtonReading) {
+    lastDebounceTime = millis(); // reiniciar el temporizador
+  }
+  lastButtonReading = currentReading;
+
+  // Solo cambiar estado si ya pasó el tiempo de debounce
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Si hay un cambio respecto al último estado estable
+    if (currentReading != lastButtonStable) {
+      lastButtonStable = currentReading;
+
+      // Detectar flanco de bajada (botón presionado)
+      if (lastButtonStable == LOW) {
+        // XOR para alternar
+        ledState = ledState ^ 1;
+        if (ledState) {
+          digitalWrite(LED, HIGH);
+          webSocket.broadcastTXT("1");
+        } 
+        else {
+            digitalWrite(LED, LOW);
+            webSocket.broadcastTXT("0");
+        }
+      }
+    }
+  }
 
   // delay(2000);
   // Mantener WebSocket activo
   webSocket.loop();
 
-  // Leer botón con debounce
-  static bool lastButtonStable = HIGH;
-  static bool lastButtonReading = HIGH;
-  bool currentReading = digitalRead(BTN);
-
-  if (currentReading != lastButtonReading) lastDebounceTime = millis();
+  // Si el valor cambió respecto a la última lectura
+  if (currentReading != lastButtonReading) {
+    lastDebounceTime = millis(); // reiniciar el temporizador
+  }
   lastButtonReading = currentReading;
 
   if ((millis() - lastDebounceTime) > debounceDelay) {
@@ -140,83 +174,26 @@ void loop() {
       }
     }
   }
+  //CODIGO CAN PARA ENVIAR CADA SEGUNDO 
+  if (millis() - prevTX >= invlTX) {
+    prevTX = millis();
 
-  if (CAN0.checkReceive() == CAN_MSGAVAIL) {
-        CAN0.readMsgBuf(&rxId, &len, rxBuf);  // Leer mensaje
-        Serial.print("Mensaje CAN recibido ID: ");
-        Serial.println(rxId,HEX);
+    /*byte speedData[1];
+    speedData[0] = speed;
+    sendCANMessage(0x100, speedData, 1);*/
 
-        switch(rxId){
-          case 0x10 :
-          // Leer velocidad desde el potenciómetro
-          speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
-          // speed = 50;
-          data[0] = (0x01 & lockState);
-          data[1] = (0xFF & speed);
-          data[2] = (tempBits & 0xFF);
-          data[3] = ((tempBits >> 8) & 0xFF);
-          data[4] = ((tempBits >> 16) & 0xFF);
-          data[5] = ((tempBits >> 24) & 0xFF);
-          CAN0.sendMsgBuf(0x01, 0, 6, data);
- 
-          break;
+    int16_t tempInt = (int16_t)(temp * 100); 
+    byte tempData[2];
+    tempData[0] = tempInt >> 8;
+    tempData[1] = tempInt & 0xFF;
+    sendCANMessage(0x101, tempData, 2);
 
-          case 0x11 :
-          // Leer temperatura
+    /*byte btnData[1];
+    btnData[0] = ledState ? 1 : 0;
+    sendCANMessage(0x102, btnData, 1);*/
 
-          if (lm75_read_temp_c(&temp_sensor, &temp))
-          {
-            tempBits = *((uint32_t*)&temp);
-            data[0] = (0x01 & lockState);
-            data[1] = (0xFF & speed);
-            data[2] = (tempBits & 0xFF);
-            data[3] = ((tempBits >> 8) & 0xFF);
-            data[4] = ((tempBits >> 16) & 0xFF);
-            data[5] = ((tempBits >> 24) & 0xFF);
-            CAN0.sendMsgBuf(0x01, 0, 6, data);
-          }
-          else
-          {
-            data[0] = (0x01 & lockState);
-            data[1] = (0xFF & speed);
-            data[2] = (0x00);
-            data[3] = (0x00);
-            data[4] = (0x00);
-            data[5] = (0x00);
-            CAN0.sendMsgBuf(0x01, 0, 6, data);
-          }
-          
- 
-          break;
-
-        }
+    Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, ledState);
   }
-
-  // Leer temperatura
-
-  // if (lm75_read_temp_c(&temp_sensor, &temp))
-  //   Serial.printf("Temperature: %.2f °C\n", temp);
-  // else
-  //   Serial.println("Error al leer LM75");
-
-  // delay(1000); // Pequeño delay para estabilidad
-
-  // Enviar datos CAN cada segundo
-  // if (millis() - prevTX >= invlTX) {
-  //   prevTX = millis();
-
-  //   byte speedData[1] = { speed };
-  //   sendCANMessage(0x100, speedData, 1);
-  //   delay(2000);
-  //   int16_t tempInt = (int16_t)(temp * 100); 
-  //   byte tempData[2] = { byte(tempInt >> 8), byte(tempInt & 0xFF) };
-  //   sendCANMessage(0x101, tempData, 2);
-  //       delay(2000);
-  //   byte btnData[1] = { lockState ? 1 : 0 };
-  //   sendCANMessage(0x102, btnData, 1);
-  //   delay(2000);
-  //   Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, lockState);
-  // }
 }
 
 // --- Funciones auxiliares ---
@@ -249,9 +226,11 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
   }
 }
 
-// void sendCANMessage(unsigned long id, byte *data, byte len) {
-//   byte status = CAN0.sendMsgBuf(id, 0, len, data);
-//   if (status == CAN_OK)
-//     Serial.printf("Mensaje CAN ID 0x%03lX enviado OK\n", id);
-//   else
-//     Serial.printf("Error al enviar CAN ID 0x%03lX\n", id);
+void sendCANMessage(unsigned long id, byte *data, byte len) {
+  byte status = CAN0.sendMsgBuf(id, 0, len, data);
+  if (status == CAN_OK)
+    Serial.printf("Mensaje CAN ID 0x%03lX enviado OK\n", id);
+  else
+    Serial.printf("Error al enviar CAN ID 0x%03lX\n", id);
+}
+

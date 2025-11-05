@@ -51,7 +51,11 @@ osThreadId defaultTaskHandle;
 /* USER CODE BEGIN PV */
 TaskHandle_t TaskTempHandle;
 TaskHandle_t TaskSpeedHandle;
-TaskHandle_t TaskRxHandle;
+//TaskHandle_t TaskRxHandle;
+
+osThreadId TempTaskHandle;
+osThreadId SpeedTaskHandle;
+//osThreadId RxTaskHandle;
 
 int16_t temperature = 0;
 uint8_t	speed = 0;
@@ -61,9 +65,12 @@ CAN_TxHeaderTypeDef SpeedTxHeader;
 CAN_TxHeaderTypeDef TempTxHeader;
 CAN_RxHeaderTypeDef RxHeader;
 uint8_t TxData = 0x01;
-uint8_t RxData[4] = {0,0,0,0};
+uint8_t RxData[8] = {0};
 uint32_t txMailbox;
 CAN_FilterTypeDef sf;
+
+osMutexId canMutexHandle;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,14 +81,16 @@ static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
-void StartTempTask( void *pvParameters );
-void StartSpeedTask(void *pvParameters);
-void StartRxTask(void *pvParameters);
+void StartTempTask(void const * argument);
+void StartSpeedTask(void const * argument);
+//void StartRxTask(void const * argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/*osThreadDef(SpeedTask, StartSpeedTask, osPriorityNormal, 0, 128);
+osThreadDef(TempTask, StartTempTask, osPriorityNormal, 0, 128);
+osThreadDef(RxTask, StartRxTask, osPriorityHigh, 0, 128);*/
 /* USER CODE END 0 */
 
 /**
@@ -119,13 +128,17 @@ int main(void)
 
   RetargetInit(&huart2);
 
-  printf("First Session Embedded Systems!!\r\n");
+  printf("Iniciando sistema...\r\n");
+
+      /* USER CODE BEGIN 3 */
 
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
+  osMutexDef(canMutex);
+  canMutexHandle = osMutexCreate(osMutex(canMutex));
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -147,9 +160,17 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  xTaskCreate(StartSpeedTask, "TaskSpeed", 128, NULL, 1, &TaskSpeedHandle);
-  xTaskCreate(StartTempTask, "TaskTemp", 128, NULL, 1, &TaskTempHandle);
-  xTaskCreate(StartRxTask, "TaskRx", 128, NULL, 2, &TaskRxHandle);
+  osThreadDef(SpeedTask, StartSpeedTask, osPriorityNormal, 0, 512);
+  osThreadDef(TempTask, StartTempTask, osPriorityNormal, 0, 512);
+//  osThreadDef(RxTask, StartRxTask, osPriorityHigh, 0, 512);
+
+  SpeedTaskHandle = osThreadCreate(osThread(SpeedTask), NULL);
+  TempTaskHandle = osThreadCreate(osThread(TempTask), NULL);
+//  RxTaskHandle = osThreadCreate(osThread(RxTask), NULL);
+
+  //xTaskCreate(StartSpeedTask, "TaskSpeed", 128, NULL, 1, &TaskSpeedHandle);
+  //xTaskCreate(StartTempTask, "TaskTemp", 128, NULL, 1, &TaskTempHandle);
+  //xTaskCreate(StartRxTask, "TaskRx", 128, NULL, 2, &TaskRxHandle);
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -230,7 +251,7 @@ static void MX_CAN_Init(void)
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
-  hcan.Init.AutoRetransmission = DISABLE;
+  hcan.Init.AutoRetransmission = ENABLE;
   hcan.Init.ReceiveFifoLocked = DISABLE;
   hcan.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan) != HAL_OK)
@@ -269,6 +290,16 @@ static void MX_CAN_Init(void)
   sf.FilterScale = CAN_FILTERSCALE_32BIT;
   sf.FilterActivation = CAN_FILTER_ENABLE;
   sf.SlaveStartFilterBank = 15;
+
+  if(HAL_CAN_ConfigFilter(&hcan, &sf))
+  {
+	  Error_Handler();
+  }
+  /*if(HAL_CAN_Start(&hcan) != HAL_OK)
+  {
+	  Error_Handler();
+  }*/
+
   /* USER CODE END CAN_Init 2 */
   if (HAL_CAN_ConfigFilter(&hcan, &sf) != HAL_OK) {
       Error_Handler();
@@ -388,7 +419,78 @@ void StartTempTask(void *pvParameters)
   }
 }
 
-void StartSpeedTask(void *pvParameters)
+//void StartRxTask(void const * argument)
+//{
+//	//uint8_t RxData[4];
+////	osEvent event;
+////	osMutexWait(canMutexHandle, osWaitForever);
+//	printf("RxTask\r\n");
+//
+//	for(;;)
+//	{
+////		event = osSignalWait(SIG_CAN_RX, osWaitForever);
+//
+////		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+////
+////		while(HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0)
+////		{
+////			printf("RxFifo level > 0");
+////			if(HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+////			{
+////				/*printf("ID:0x%03lX DLC:%lu D:%02X %02X %02X %02X\r\n",
+////						RxHeader.StdId, RxHeader.DLC, RxData[0], RxData[1],
+////						RxData[2], RxData[3]);*/
+////				printf("CAN Rx interrupt...\r\n");
+////			}
+////		}
+//
+////		if (event.status == osEventSignal)
+////		{
+////			printf("Event...");
+//////			while(HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0)
+//////			{
+////				printf("RxFifo level > 0");
+////				if(HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+////				{
+////					/*printf("ID:0x%03lX DLC:%lu D:%02X %02X %02X %02X\r\n",
+////							RxHeader.StdId, RxHeader.DLC, RxData[0], RxData[1],
+////							RxData[2], RxData[3]);*/
+////					printf("CAN Rx interrupt...\r\n");
+////				}
+//////			}
+////
+////
+////		}
+//
+//	}
+////	osMutexRelease(canMutexHandle);
+//}
+
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+//	printf("Interrupción iniciada...\r\n");
+//	osSignalSet(RxTaskHandle, SIG_CAN_RX);
+//	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+//	vTaskNotifyGiveFromISR(RxTaskHandle, &xHigherPriorityTaskWoken);
+//	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+//	printf("Llamado a tarea Rx\r\n");
+
+	while(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0)
+	{
+		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+		{
+			/*printf("ID:0x%03lX DLC:%lu D:%02X %02X %02X %02X\r\n",
+					RxHeader.StdId, RxHeader.DLC, RxData[0], RxData[1],
+					RxData[2], RxData[3]);*/
+			printf("CAN Rx interrupt...\r\n");
+		}
+	}
+}
+
+/* USER CODE BEGIN 4 */
+
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
   uint8_t messageData = 0x01; // ejemplo de velocidad simulada
   for (;;)
@@ -446,6 +548,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 void StartDefaultTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
+	if(HAL_CAN_Start(&hcan) != HAL_OK)
+	  {
+		  Error_Handler();
+	  }
+	if(HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+	  {
+		  Error_Handler();
+	  }
   /* Infinite loop */
   for(;;)
   {
