@@ -58,7 +58,7 @@
 extern TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN EV */
-
+extern CAN_HandleTypeDef hcan;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -188,5 +188,8 @@ void EXTI15_10_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-
+void CAN1_RX0_IRQHandler(void)
+{
+	HAL_CAN_IRQHandler(&hcan);
+}
 /* USER CODE END 1 */

@@ -11,8 +11,7 @@ lm75_t temp_sensor;
 extern "C" {
   bool lm75_i2c_write_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
 }
-//comentario para test
-//comentario de Luis
+
 #include <stdint.h>
 
 #define LED 2
@@ -31,7 +30,8 @@ const unsigned long debounceDelay = 50; // 50 ms
 
 // CAN VARIABLES
 unsigned long prevTX = 0;                                        // Variable to store last execution time
-const unsigned int invlTX = 1000;                                // One second interval constant
+//const unsigned int invlTX = 1000;                                // One second interval constant
+const unsigned int invlTX = 10000;                                // Three seconds interval constant
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -76,10 +76,10 @@ void setup() {
 
   // CAN0.setMode(MCP_NORMAL);
   // Serial.println("CAN listo en modo NORMAL.");
-  if(CAN0.setMode(MCP_LOOPBACK) == CAN_OK)
-    Serial.println("Modo Loopback activado");
+  if(CAN0.setMode(MCP_NORMAL) == CAN_OK)
+    Serial.println("Modo normal activado");
   else
-    Serial.println("Error al activar Loopback");
+    Serial.println("Error al activar normal");
   delay(1000);
 
 }
@@ -133,10 +133,6 @@ void loop() {
   delay(1000);
   webSocket.loop();
 
-  // static bool lastButtonStable = HIGH;   // último estado estable del botón
-  // static bool lastButtonReading = HIGH;  // última lectura cruda
-  // bool currentReading = digitalRead(BTN);
-
   // Si el valor cambió respecto a la última lectura
   if (currentReading != lastButtonReading) {
     lastDebounceTime = millis(); // reiniciar el temporizador
@@ -168,9 +164,9 @@ void loop() {
   if (millis() - prevTX >= invlTX) {
     prevTX = millis();
 
-    byte speedData[1];
+    /*byte speedData[1];
     speedData[0] = speed;
-    sendCANMessage(0x100, speedData, 1);
+    sendCANMessage(0x100, speedData, 1);*/
 
     int16_t tempInt = (int16_t)(temp * 100); 
     byte tempData[2];
@@ -178,9 +174,9 @@ void loop() {
     tempData[1] = tempInt & 0xFF;
     sendCANMessage(0x101, tempData, 2);
 
-    byte btnData[1];
+    /*byte btnData[1];
     btnData[0] = ledState ? 1 : 0;
-    sendCANMessage(0x102, btnData, 1);
+    sendCANMessage(0x102, btnData, 1);*/
 
     Serial.printf("CAN → Vel:%d  Temp:%.2f°C  Btn:%d\n", speed, temp, ledState);
   }

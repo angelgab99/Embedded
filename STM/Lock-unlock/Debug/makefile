@@ -64,8 +64,8 @@ all: main-build
 main-build: Lock-unlock.elf secondary-outputs
 
 # Tool invocations
-Lock-unlock.elf Lock-unlock.map: $(OBJS) $(USER_OBJS) C:\Users\marti\OneDrive\Documentos\Embedded\STM\Lock-unlock\STM32F103RBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Lock-unlock.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\marti\OneDrive\Documentos\Embedded\STM\Lock-unlock\STM32F103RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Lock-unlock.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Lock-unlock.elf Lock-unlock.map: $(OBJS) $(USER_OBJS) /Users/luisrivera/Documents/developer/Embedded/tec_embedded/projects/locksys/Embedded/STM/Lock-unlock/STM32F103RBTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Lock-unlock.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/Users/luisrivera/Documents/developer/Embedded/tec_embedded/projects/locksys/Embedded/STM/Lock-unlock/STM32F103RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Lock-unlock.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
