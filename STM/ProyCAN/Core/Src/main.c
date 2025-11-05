@@ -129,9 +129,10 @@ int main(void)
 				                      ((uint32_t)RxData[3] << 8) |
 				                      ((uint32_t)RxData[4] << 16) |
 				                      ((uint32_t)RxData[5] << 24);
-
 				  memcpy(&temp, &tempBits, sizeof(float));
-					  printf("\n%d,%d, %d.%02d",speed,button_status ,45);
+				  int tempamdanr = (int)temp;  // si 'temperatura' es float
+
+				  printf("%d,%d,%d\n", speed, button_status, tempamdanr);
 		      }
 	        //  printf("\r\n");
 	      }
