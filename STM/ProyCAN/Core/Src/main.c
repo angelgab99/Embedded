@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -27,6 +28,18 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+TaskHandle_t TaskTempHandle;
+TaskHandle_t TaskSpeedHandle;
+//TaskHandle_t TaskRxHandle;
+
+osThreadId TempTaskHandle;
+osThreadId SpeedTaskHandle;
+osThreadId RxTaskHandle;
+
+osSemaphoreId mySemHandle;
+
+osSemaphoreDef(mySem);
+
 
 /* USER CODE END PTD */
 
@@ -45,11 +58,14 @@ CAN_HandleTypeDef hcan;
 
 UART_HandleTypeDef huart2;
 
+osThreadId defaultTaskHandle;
 /* USER CODE BEGIN PV */
+	#define TICKS_PER_MS (osKernelSysTickFrequency / 1000)
+
 	CAN_TxHeaderTypeDef TxHeader;
 	CAN_TxHeaderTypeDef TempTxHeader;
 	CAN_RxHeaderTypeDef RxHeader;
-	uint8_t TxData[8] = {0x10, 0x34, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22};
+	uint8_t TxData[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 	uint8_t RxData[8];
 	float temp = 0;
 	uint8_t	speed = 0;
@@ -58,6 +74,7 @@ UART_HandleTypeDef huart2;
 	uint32_t txMailbox;
 	CAN_FilterTypeDef sf;
 
+	osMutexId canMutexHandle;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,8 +82,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_CAN_Init(void);
-/* USER CODE BEGIN PFP */
+void StartDefaultTask(void const * argument);
 
+/* USER CODE BEGIN PFP */
+void StartTempTask(void const * argument);
+void StartSpeedTask(void const * argument);
+void StartRxTask(void const * argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -109,64 +130,60 @@ int main(void)
   RetargetInit(&huart2);
   /* USER CODE END 2 */
 
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  osMutexDef(canMutex);
+  canMutexHandle = osMutexCreate(osMutex(canMutex));
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+
+
+   // Crear semáforo binario con contador inicial = 0
+  mySemHandle = osSemaphoreCreate(osSemaphore(mySem), 1);
+    // Si quieres que empiece bloqueado, NO llames osSemaphoreRelease al inicio
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of defaultTask */
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  osThreadDef(SpeedTask, StartSpeedTask, osPriorityNormal, 0, 512);
+  osThreadDef(TempTask, StartTempTask, osPriorityNormal, 0, 512);
+  osThreadDef(RxTask, StartRxTask, osPriorityHigh, 0, 512);
+
+  SpeedTaskHandle = osThreadCreate(osThread(SpeedTask), NULL);
+  TempTaskHandle = osThreadCreate(osThread(TempTask), NULL);
+  RxTaskHandle = osThreadCreate(osThread(RxTask), NULL);
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  printf("CAN interfacing!!\r\n");
+  while (1)
+  {
+    /* USER CODE END WHILE */
 
-	  while (1) {
-
-
-
-		  if (HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0) {
-		      if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
-		    	 // printf("CAN ID: 0x%03lX  Data:", RxHeader.StdId);
-				  for (int i = 0; i < RxHeader.DLC; i++) {
-					  //printf(" %02X", RxData[i]);
-				  }
-				  button_status = (0x01 & RxData[0]);
-				  speed = (0xFF & RxData[1]);
-				  uint32_t tempBits = ((uint32_t)RxData[2]) |
-				                      ((uint32_t)RxData[3] << 8) |
-				                      ((uint32_t)RxData[4] << 16) |
-				                      ((uint32_t)RxData[5] << 24);
-				  memcpy(&temp, &tempBits, sizeof(float));
-				  int tempamdanr = (int)temp;  // si 'temperatura' es float
-
-				  printf("%d,%d,%d\n", speed, button_status, tempamdanr);
-		      }
-	        //  printf("\r\n");
-	      }
-		  static uint32_t lastSend = 0;
-		  if (HAL_GetTick() - lastSend >= 1000) {  // cada 1 segundo
-		       lastSend = HAL_GetTick();
-
-		       // Enviar mensaje CAN con ID 0x10
-		       if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &txMailbox) == HAL_OK) {
-		           //printf("CAN TX: ID=0x%03lX Data:", TxHeader.StdId);
-		           for (int i = 0; i < TxHeader.DLC; i++) {
-		               //printf(" %02X", TxData[i]);
-		           }
-		           //printf("\r\n");
-		       } else {
-		           //printf("Error al enviar CAN\r\n");
-		       }
-		       //HAL_Delay(2000);
-		       // Enviar mensaje CAN con ID 0x10
-
-			   if (HAL_CAN_AddTxMessage(&hcan, &TempTxHeader, TxData, &txMailbox) == HAL_OK) {
-				  // printf("CAN TX: ID=0x%03lX Data:", TempTxHeader.StdId);
-				   for (int i = 0; i < TempTxHeader.DLC; i++) {
-					  // printf(" %02X", TxData[i]);
-				   }
-				  // printf("\r\n");
-			   } else {
-				   //printf("Error al enviar CAN\r\n");
-			   }
-		   }
-	      HAL_Delay(1000);
-	  }
+    /* USER CODE BEGIN 3 */
+  }
   /* USER CODE END 3 */
-
 }
 
 /**
@@ -336,8 +353,193 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void StartTempTask(void const * argument)
+{
+	uint32_t PERIOD_MS = 4000;
+	uint32_t lastWakeTime = osKernelSysTick();
+	uint32_t periodTicks = PERIOD_MS * TICKS_PER_MS;
+	for(;;)
+	{
+		osMutexWait(canMutexHandle, osWaitForever);
+
+
+		// Enviar mensaje CAN con ID 0x10
+
+	   if (HAL_CAN_AddTxMessage(&hcan, &TempTxHeader, TxData, &txMailbox) == HAL_OK) {
+
+		  // printf("CAN TX: ID=0x%03lX Data:", TempTxHeader.StdId);
+		   for (int i = 0; i < TempTxHeader.DLC; i++) {
+			  // printf(" %02X", TxData[i]);
+		   }
+		   printf("Temperature request...\r\n");
+		  // printf("\r\n");
+	   } else {
+		   //printf("Error al enviar CAN\r\n");
+	   }
+		osMutexRelease(canMutexHandle);
+	   // --- Calcular siguiente tick absoluto ---
+		 lastWakeTime += periodTicks;
+
+		 // --- Esperar hasta ese tick ---
+		 uint32_t now = osKernelSysTick();
+		 if ((int32_t)(lastWakeTime - now) > 0) {
+			 osDelay((lastWakeTime - now) / TICKS_PER_MS);
+		 }
+
+	}
+
+}
+
+void StartSpeedTask(void const * argument)
+{
+	uint32_t PERIOD_MS = 2000;
+	uint32_t lastWakeTime = osKernelSysTick();
+	uint32_t periodTicks = PERIOD_MS * TICKS_PER_MS;
+	for(;;)
+	{
+		osMutexWait(canMutexHandle, osWaitForever);
+
+
+	   // Enviar mensaje CAN con ID 0x10
+	   if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &txMailbox) == HAL_OK) {
+
+		   //printf("CAN TX: ID=0x%03lX Data:", TxHeader.StdId);
+		   for (int i = 0; i < TxHeader.DLC; i++) {
+			   //printf(" %02X", TxData[i]);
+		   }
+			printf("Speed request...\r\n");
+		   //printf("\r\n");
+	   } else {
+		   //printf("Error al enviar CAN\r\n");
+	   }
+		 osMutexRelease(canMutexHandle);
+	   // --- Calcular siguiente tick absoluto ---
+		 lastWakeTime += periodTicks;
+
+		 // --- Esperar hasta ese tick ---
+
+		 uint32_t now = osKernelSysTick();
+		 if ((int32_t)(lastWakeTime - now) > 0) {
+			 osDelay((lastWakeTime - now) / TICKS_PER_MS);
+		 }
+
+	}
+
+}
+
+void StartRxTask(void const * argument)
+{
+	for(;;)
+	{
+	   // Esperar a que la ISR libere el semáforo
+	osStatus statusSem = osSemaphoreWait(mySemHandle, osWaitForever);
+	  if (statusSem == osOK) {
+
+		  // Intentar tomar el mutex (bloquea si otra tarea lo está usando)
+
+		  osStatus statusMutex = osMutexWait(canMutexHandle, osWaitForever);
+
+		  if (statusMutex == osOK) {
+			  if (HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0) {
+
+				  printf("entra a rx");
+				  printf("\r\n");
+
+					  if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
+						 // printf("CAN ID: 0x%03lX  Data:", RxHeader.StdId);
+						  printf("toma mensaje exitoso");
+						  printf("\r\n");
+						  for (int i = 0; i < RxHeader.DLC; i++) {
+							  //printf(" %02X", RxData[i]);
+						  }
+						  button_status = (0x01 & RxData[0]);
+						  speed = (0xFF & RxData[1]);
+						  uint32_t tempBits = ((uint32_t)RxData[2]) |
+											  ((uint32_t)RxData[3] << 8) |
+											  ((uint32_t)RxData[4] << 16) |
+											  ((uint32_t)RxData[5] << 24);
+						  memcpy(&temp, &tempBits, sizeof(float));
+						  int tempamdanr = (int)temp;  // si 'temperatura' es float
+
+						  printf("%d,%d,%d\n", speed, button_status, tempamdanr);
+					  }
+
+			  }
+			  osMutexRelease(canMutexHandle);
+		  }
+
+	  }
+
+
+
+	}
+	osMutexRelease(canMutexHandle);
+}
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+
+	while(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0)
+	{
+		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+		{
+
+			// Limpiar bandera de interrupción
+
+			//HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
+
+			// Liberar el semáforo para despertar la tarea
+
+			osSemaphoreRelease(mySemHandle);
+
+		}
+	}
+}
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  if(HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+  {
+	  Error_Handler();
+  }
+  for(;;)
+  {
+	osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM4 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM4)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
