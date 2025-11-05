@@ -1,4 +1,4 @@
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <WebSocketsServer.h>
 #include <Wire.h>
 #include "lm75.h"
@@ -16,8 +16,7 @@ extern "C" {
 
 #define LED 2
 #define BTN 4
-#define POT_PIN 36 //ADC0 pin36
-#define RESOLUTION 8
+#define POT_PIN A0 // ADC único del ESP8266
 #define SPEEDLMT 200
 
 #define CAN0_INT 15      // Set INT to pin D2 related to GPIO15
@@ -25,8 +24,19 @@ extern "C" {
 //#define CAN0_CS D8      // ESP8266
 MCP_CAN CAN0(CAN0_CS);     
 
+// Variables
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms
+unsigned long prevTX = 0;  //to sotre lasst exectution time
+const unsigned int invlTX = 1000; // intervalo de envío CAN (ms)
+
+uint32_t tempBits;
+byte data[6];  
+long unsigned int rxId;
+unsigned char len = 0;
+unsigned char rxBuf[8];
+
+ 
 
 // CAN VARIABLES
 unsigned long prevTX = 0;                                        // Variable to store last execution time
@@ -35,9 +45,11 @@ const unsigned int invlTX = 10000;                                // Three secon
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
-bool ledState = false;
 
-void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
+lm75_t temp_sensor;
+extern "C" {
+  bool lm75_i2c_write_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
+}
 
 void speedReadADC_init(uint8_t resolution);
 uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution);
@@ -45,27 +57,26 @@ void sendCANMessage(unsigned long id, byte *data, byte len);
 
 void setup() {
   Serial.begin(115200);
+
+  // Pines
   pinMode(LED, OUTPUT);
-  pinMode(BTN, INPUT_PULLUP); // botón en GPIO4
+  pinMode(BTN, INPUT_PULLUP);
 
-  //Configurar Resolución ADC
-  speedReadADC_init(RESOLUTION);
-  
+  // Configurar ADC (ESP8266 tiene 10 bits)
+  speedReadADC_init();
 
-  // Configurar como Access Point
-  WiFi.mode(WIFI_AP);
+  // Configurar ESP8266 como Access Point
   WiFi.softAP(ssid, password);
-
   Serial.println();
-  Serial.print("ESP32 en modo AP. IP: ");
-  Serial.println(WiFi.softAPIP());  // → normalmente 192.168.4.1
+  Serial.print("ESP8266 en modo AP. IP: ");
+  Serial.println(WiFi.softAPIP());
 
   // Iniciar WebSocket
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
 
-  // Temperature sensor setup
-  Wire.begin(21, 22); // SDA=21, SCL=22 
+  // Sensor de temperatura LM75
+  Wire.begin(D3, D1); // ESP8266: SDA=D2, SCL=D1
   lm75_init(&temp_sensor, LM75_SLAVE_ADDR, lm75_i2c_write_read);
   if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK)
     Serial.println("MCP2515 inicializado correctamente.");
@@ -124,13 +135,8 @@ void loop() {
     }
   }
 
-  // Tmperature sensor
-  float temp;
-  if (lm75_read_temp_c(&temp_sensor, &temp))
-    Serial.printf("Temperature: %.3f °C\n", temp);
-  else
-    Serial.println("Error while reading LM75 sensor");
-  delay(1000);
+  // delay(2000);
+  // Mantener WebSocket activo
   webSocket.loop();
 
   // Si el valor cambió respecto a la última lectura
@@ -139,24 +145,32 @@ void loop() {
   }
   lastButtonReading = currentReading;
 
-  // Solo cambiar estado si ya pasó el tiempo de debounce
   if ((millis() - lastDebounceTime) > debounceDelay) {
-    // Si hay un cambio respecto al último estado estable
     if (currentReading != lastButtonStable) {
       lastButtonStable = currentReading;
-
-      // Detectar flanco de bajada (botón presionado)
       if (lastButtonStable == LOW) {
-        // XOR para alternar
-        ledState = ledState ^ 1;
-        if (ledState) {
-          digitalWrite(LED, HIGH);
-          webSocket.broadcastTXT("1");
-        } 
-        else {
-            digitalWrite(LED, LOW);
-            webSocket.broadcastTXT("0");
+        lockState = !lockState;
+        digitalWrite(LED, lockState ? HIGH : LOW);
+        webSocket.broadcastTXT(lockState ? "1" : "0");
+        // Leer velocidad desde el potenciómetro
+        speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
+
+        //leer temperatura
+        if (lm75_read_temp_c(&temp_sensor, &temp))
+        {
+          tempBits = *((uint32_t*)&temp);
         }
+        else{
+          tempBits = 0x00;
+        }
+        data[0] = (0x01 & lockState);
+        data[1] = (0xFF & speed);
+        data[2] = (tempBits & 0xFF);
+        data[3] = ((tempBits >> 8) & 0xFF);
+        data[4] = ((tempBits >> 16) & 0xFF);
+        data[5] = ((tempBits >> 24) & 0xFF);
+        CAN0.sendMsgBuf(0x01, 0, 6, data);
+
       }
     }
   }
@@ -182,48 +196,31 @@ void loop() {
   }
 }
 
-void speedReadADC_init(uint8_t resolution){
-  analogReadResolution(resolution);
-  Serial.print("ADC read Init");
+// --- Funciones auxiliares ---
+void speedReadADC_init() {
+  // ESP8266 ADC tiene resolución fija de 10 bits, no se puede cambiar
+  Serial.println("ADC inicializado (10 bits, ESP8266)");
 }
 
-uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt, int resolution){
-  uint8_t speed = (analogRead(POT_PIN) * speedLmt)/(1 << resolution);
-  Serial.print(speed);
+uint8_t speedReadADC_loop(int potentiometer, uint8_t speedLmt) {
+  uint8_t speed = (analogRead(potentiometer) * speedLmt) / 1023; // 10 bits
   return speed;
 }
 
-
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
-    case WStype_CONNECTED: {
+    case WStype_CONNECTED:
       Serial.printf("Cliente [%u] conectado\n", num);
-      // Al conectar, enviar el estado actual del LED
-      if (ledState) webSocket.sendTXT(num, "1");
-      else webSocket.sendTXT(num, "0");
+      webSocket.sendTXT(num, lockState ? "1" : "0");
       break;
-    }
-
-    case WStype_DISCONNECTED: {
+    case WStype_DISCONNECTED:
       Serial.printf("Cliente [%u] desconectado\n", num);
       break;
-    }
-
     case WStype_TEXT: {
       String msg = String((char*)payload).substring(0, length);
-      Serial.printf("Mensaje recibido de [%u]: %s\n", num, msg.c_str());
-
-      if (msg == "1") {
-        digitalWrite(LED, HIGH);
-        ledState = true;
-        // Avisar a todos los clientes
-        webSocket.broadcastTXT("1");
-      } 
-      else if (msg == "0") {
-        digitalWrite(LED, LOW);
-        ledState = false;
-        webSocket.broadcastTXT("0");
-      }
+      Serial.printf("Mensaje de [%u]: %s\n", num, msg.c_str());
+      if (msg == "1") { digitalWrite(LED, HIGH); lockState = true; webSocket.broadcastTXT("1"); }
+      else if (msg == "0") { digitalWrite(LED, LOW); lockState = false; webSocket.broadcastTXT("0"); }
       break;
     }
   }

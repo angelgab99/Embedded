@@ -132,6 +132,7 @@ int main(void)
 
       /* USER CODE BEGIN 3 */
 
+
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -153,7 +154,7 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of defaultask */
+  /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
@@ -272,7 +273,7 @@ static void MX_CAN_Init(void)
   TempTxHeader.ExtId = 0x00;
   TempTxHeader.TransmitGlobalTime = DISABLE;
 
-  RxHeader.DLC = 0x04;
+  RxHeader.DLC = 0x06;
   RxHeader.ExtId = 0x00;
   RxHeader.StdId = 0x01;
   RxHeader.IDE = CAN_ID_STD;
@@ -300,7 +301,20 @@ static void MX_CAN_Init(void)
   }*/
 
   /* USER CODE END CAN_Init 2 */
+  if (HAL_CAN_ConfigFilter(&hcan, &sf) != HAL_OK) {
+      Error_Handler();
+  }
+  // 3️⃣ Habilitar interrupción del NVIC
+  HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
+  // 4️⃣ Activar notificación de recepción
+  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+  // 5️⃣ Iniciar el periférico CAN
+  if (HAL_CAN_Start(&hcan) != HAL_OK){
+    Error_Handler();
+  }
 }
 
 /**
@@ -396,28 +410,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void StartTempTask(void const * argument)
+void StartTempTask(void *pvParameters)
 {
-	for(;;)
-	{
-//		osMutexWait(canMutexHandle, osWaitForever);
-		printf("Temperature request...\r\n");
-		osDelay(1000);
-//		osMutexRelease(canMutexHandle);
-	}
-
-}
-
-void StartSpeedTask(void const * argument)
-{
-	for(;;)
-	{
-//		osMutexWait(canMutexHandle, osWaitForever);
-		printf("Speed request...\r\n");
-		osDelay(2000);
-//		osMutexRelease(canMutexHandle);
-	}
-
+  // Esta tarea no transmite nada, solo existe para ejemplo.
+  for (;;)
+  {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
 }
 
 //void StartRxTask(void const * argument)
@@ -493,22 +492,49 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
-    /* Esta función se llama si alguna tarea desborda su stack */
-    printf("\r\n*** Stack overflow en la tarea: %s ***\r\n", pcTaskName);
-    taskDISABLE_INTERRUPTS();
+  uint8_t messageData = 0x01; // ejemplo de velocidad simulada
+  for (;;)
+  {
+    if (HAL_CAN_AddTxMessage(&hcan, &SpeedTxHeader, &messageData, &txMailbox) == HAL_OK)
+    {
+      printf("[CAN TX] ID: 0x%03lX  Data: %02X\r\n", SpeedTxHeader.StdId, messageData);
+    }
+    else
+    {
+      printf("[CAN TX] Error al enviar mensaje\r\n");
+    }
 
+    vTaskDelay(pdMS_TO_TICKS(1000)); // enviar cada 1s
+  }
 }
 
-void vApplicationMallocFailedHook(void)
+
+void StartRxTask(void *pvParameters)
 {
-    /* Esta función se llama si falla una asignación dinámica de memoria */
-    printf("\r\n*** Error: malloc falló (heap insuficiente) ***\r\n");
-    taskDISABLE_INTERRUPTS();
+  printf("StartRxTask iniciada. Esperando mensajes CAN...\r\n");
 
+        printf("[CAN RX] ID: 0x%03lX  DLC:%d  Data:", RxHeader.StdId, RxHeader.DLC);
+        for (uint8_t i = 0; i < RxHeader.DLC; i++)
+          printf(" %02X", RxData[i]);
+        	printf("\r\n");
+		vTaskDelay(pdMS_TO_TICKS(1000)); // solo para mantener la tarea viva
+
+    vTaskDelay(pdMS_TO_TICKS(10)); // evita bloquear CPU
 
 }
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
 
-/* USER CODE END 4 */
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+    {
+        printf("[CAN RX ISR] ID: 0x%03lX DLC:%d Data:", rxHeader.StdId, rxHeader.DLC);
+        for (uint8_t i = 0; i < rxHeader.DLC; i++)
+            printf(" %02X", rxData[i]);
+        printf("\r\n");
+    }
+}
 
 /* USER CODE END 4 */
 
