@@ -355,7 +355,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void StartTempTask(void const * argument)
 {
-	uint32_t PERIOD_MS = 4000;
+	uint32_t PERIOD_MS = 2000;
 	uint32_t lastWakeTime = osKernelSysTick();
 	uint32_t periodTicks = PERIOD_MS * TICKS_PER_MS;
 	for(;;)
@@ -392,7 +392,7 @@ void StartTempTask(void const * argument)
 
 void StartSpeedTask(void const * argument)
 {
-	uint32_t PERIOD_MS = 2000;
+	uint32_t PERIOD_MS = 1000;
 	uint32_t lastWakeTime = osKernelSysTick();
 	uint32_t periodTicks = PERIOD_MS * TICKS_PER_MS;
 	for(;;)
@@ -437,21 +437,15 @@ void StartRxTask(void const * argument)
 
 		  // Intentar tomar el mutex (bloquea si otra tarea lo está usando)
 
-		  osStatus statusMutex = osMutexWait(canMutexHandle, osWaitForever);
+		 osStatus statusMutex = osMutexWait(canMutexHandle, osWaitForever);
+		  printf("entra a rx");
+						  printf("\r\n");
+		 // if (statusMutex == osOK) {
 
-		  if (statusMutex == osOK) {
-			  if (HAL_CAN_GetRxFifoFillLevel(&hcan, CAN_RX_FIFO0) > 0) {
-
-				  printf("entra a rx");
-				  printf("\r\n");
-
-					  if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
 						 // printf("CAN ID: 0x%03lX  Data:", RxHeader.StdId);
 						  printf("toma mensaje exitoso");
 						  printf("\r\n");
-						  for (int i = 0; i < RxHeader.DLC; i++) {
-							  //printf(" %02X", RxData[i]);
-						  }
+
 						  button_status = (0x01 & RxData[0]);
 						  speed = (0xFF & RxData[1]);
 						  uint32_t tempBits = ((uint32_t)RxData[2]) |
@@ -462,11 +456,9 @@ void StartRxTask(void const * argument)
 						  int tempamdanr = (int)temp;  // si 'temperatura' es float
 
 						  printf("%d,%d,%d\n", speed, button_status, tempamdanr);
-					  }
 
-			  }
-			  osMutexRelease(canMutexHandle);
-		  }
+			 osMutexRelease(canMutexHandle);
+		 // }
 
 	  }
 
@@ -478,21 +470,21 @@ void StartRxTask(void const * argument)
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
 
-	while(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0)
-	{
-		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
-		{
+	 BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-			// Limpiar bandera de interrupción
+	    while (HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0)
+	    {
+	        if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+	        {
+	            // Libera el semáforo desde ISR
+	        	//printf("semaforo");
+	            xSemaphoreGiveFromISR(mySemHandle, &xHigherPriorityTaskWoken);
+	        }
 
-			//HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
 
-			// Liberar el semáforo para despertar la tarea
 
-			osSemaphoreRelease(mySemHandle);
-
-		}
-	}
+	    }
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* USER CODE END 4 */

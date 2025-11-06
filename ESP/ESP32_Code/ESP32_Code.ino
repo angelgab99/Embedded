@@ -21,7 +21,7 @@ const char* password = "246810ES!";
 //VARIABLES de funciones
 float temp;
 uint8_t speed;
-uint8_t lockState = 0;
+uint8_t lockState = 1;
 
 // Variables
 unsigned long lastDebounceTime = 0;
@@ -129,7 +129,7 @@ void loop() {
         else{
           tempBits = 0x00;
         }
-        data[0] = (0x01 & lockState);
+        data[0] = (0x01 & !lockState);
         data[1] = (0xFF & speed);
         data[2] = (tempBits & 0xFF);
         data[3] = ((tempBits >> 8) & 0xFF);
@@ -151,7 +151,7 @@ void loop() {
           // Leer velocidad desde el potenciómetro
           speed = speedReadADC_loop(POT_PIN, SPEEDLMT);
           // speed = 50;
-          data[0] = (0x01 & lockState);
+          data[0] = (0x01 & !lockState);
           data[1] = (0xFF & speed);
           data[2] = (tempBits & 0xFF);
           data[3] = ((tempBits >> 8) & 0xFF);
@@ -167,7 +167,7 @@ void loop() {
           if (lm75_read_temp_c(&temp_sensor, &temp))
           {
             tempBits = *((uint32_t*)&temp);
-            data[0] = (0x01 & lockState);
+            data[0] = (0x01 & !lockState);
             data[1] = (0xFF & speed);
             data[2] = (tempBits & 0xFF);
             data[3] = ((tempBits >> 8) & 0xFF);
@@ -177,7 +177,7 @@ void loop() {
           }
           else
           {
-            data[0] = (0x01 & lockState);
+            data[0] = (0x01 & !lockState);
             data[1] = (0xFF & speed);
             data[2] = (0x00);
             data[3] = (0x00);

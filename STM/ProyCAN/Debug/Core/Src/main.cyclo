@@ -5,8 +5,8 @@
 ../Core/Src/main.c:331:13:MX_GPIO_Init	1
 ../Core/Src/main.c:356:6:StartTempTask	4
 ../Core/Src/main.c:393:6:StartSpeedTask	4
-../Core/Src/main.c:430:6:StartRxTask	6
-../Core/Src/main.c:478:6:HAL_CAN_RxFifo0MsgPendingCallback	3
-../Core/Src/main.c:507:6:StartDefaultTask	2
-../Core/Src/main.c:530:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:548:6:Error_Handler	1
+../Core/Src/main.c:430:6:StartRxTask	2
+../Core/Src/main.c:470:6:HAL_CAN_RxFifo0MsgPendingCallback	4
+../Core/Src/main.c:499:6:StartDefaultTask	2
+../Core/Src/main.c:522:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:540:6:Error_Handler	1
